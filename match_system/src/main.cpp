@@ -2,10 +2,13 @@
 // You should copy it to another filename to avoid overwriting it.
 
 #include "match_server/Match.h"
+#include "save_client/Save.h"
 #include <thrift/protocol/TBinaryProtocol.h>
 #include <thrift/server/TSimpleServer.h>
 #include <thrift/transport/TServerSocket.h>
 #include <thrift/transport/TBufferTransports.h>
+#include <thrift/transport/TTransportUtils.h>
+#include <thrift/transport/TSocket.h>
 
 #include <iostream>
 #include <thread>
@@ -19,7 +22,8 @@ using namespace ::apache::thrift::protocol;
 using namespace ::apache::thrift::transport;
 using namespace ::apache::thrift::server;
 
-using namespace  ::match_service;
+using namespace ::match_service;
+using namespace ::save_service;
 using namespace std;
 
 struct Task
@@ -37,40 +41,55 @@ struct MessageQueue
 
 class Pool
 {
-public:
-    void save_result(int a, int b)
-    {
-        printf("Match Result: %d %d\n", a, b);
-    }
-
-    void match()
-    {
-        while (users.size() > 1)
+    public:
+        void save_result(int a, int b)
         {
-            auto a = users[0], b = users[1];
-            users.erase(users.begin());
-            users.erase(users.begin());
+            printf("Match Result: %d %d\n", a, b);
 
-            save_result(a.id, b.id);
-        }
-    }
+            std::shared_ptr<TTransport> socket(new TSocket("123.57.47.211", 9090));
+            std::shared_ptr<TTransport> transport(new TBufferedTransport(socket));
+            std::shared_ptr<TProtocol> protocol(new TBinaryProtocol(transport));
+            SaveClient client(protocol);
 
-    void add(User user)
-    {
-        users.push_back(user);
-    }
+            try {
+                transport->open();
 
-    void remove(User user)
-    {
-        for (uint32_t i =0; i < users.size(); i++)
-            if(users[i].id == user.id)
-            {
-                users.erase(users.begin() + i);
-                break;
+                client.save_data("acs_8794", "4b693cc3", a, b);
+
+                transport->close();
+            } catch (TException& tx) {
+                cout << "ERROR: " << tx.what() << endl;
             }
-    }
-private:
-    vector<User> users;
+        }
+
+        void match()
+        {
+            while (users.size() > 1)
+            {
+                auto a = users[0], b = users[1];
+                users.erase(users.begin());
+                users.erase(users.begin());
+
+                save_result(a.id, b.id);
+            }
+        }
+
+        void add(User user)
+        {
+            users.push_back(user);
+        }
+
+        void remove(User user)
+        {
+            for (uint32_t i =0; i < users.size(); i++)
+                if(users[i].id == user.id)
+                {
+                    users.erase(users.begin() + i);
+                    break;
+                }
+        }
+    private:
+        vector<User> users;
 }pool;
 
 class MatchHandler : virtual public MatchIf {
@@ -109,9 +128,9 @@ void consume_task()
     {
         unique_lock<mutex> lck(message_queue.m);
         if (message_queue.q.empty())
-            {
-                message_queue.cv.wait(lck);
-            }
+        {
+            message_queue.cv.wait(lck);
+        }
         else 
         {
             auto task = message_queue.q.front();

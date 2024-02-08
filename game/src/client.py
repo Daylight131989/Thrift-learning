@@ -11,7 +11,7 @@ from sys import stdin   # 用python从终端读东西
 
 def operate(op, user_id, username, score):
     # Make socket
-    transport = TSocket.TSocket('localhost', 9090)
+    transport = TSocket.TSocket('172.17.0.96', 9090)
 
     # Buffering is critical. Raw sockets are very slow
     transport = TTransport.TBufferedTransport(transport)
